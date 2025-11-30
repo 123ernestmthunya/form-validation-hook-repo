@@ -2,9 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import type { ValidationRule } from '../validation/validationRules';
 
 // Types for the hook
-export interface FieldValue {
-  [key: string]: any;
-}
+export type FieldValue = Record<string, unknown>;
 
 export interface FieldErrors {
   [key: string]: string | null;
@@ -27,7 +25,7 @@ export interface FormState {
 }
 
 export interface FormActions {
-  setValue: (name: string, value: any) => void;
+  setValue: (name: string, value: unknown) => void;
   setError: (name: string, error: string | null) => void;
   setTouched: (name: string, touched: boolean) => void;
   validateField: (name: string) => string | null;
@@ -37,6 +35,12 @@ export interface FormActions {
   handleChange: (name: string) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
   handleBlur: (name: string) => () => void;
   handleSubmit: (onSubmit: (values: FieldValue) => void) => (event: React.FormEvent) => void;
+  getFieldProps: (name: string) => {
+    name: string;
+    value: string | number;
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+    onBlur: () => void;
+  };
 }
 
 export interface UseFormValidationOptions {
@@ -101,7 +105,7 @@ export const useFormValidation = (options: UseFormValidationOptions = {}): UseFo
 
     setErrors(newErrors);
     return isFormValid;
-  }, [validateField, validationRules]);
+  }, [validateField, validationRules, values]);
 
   // Check if form is valid (computed)
   const isValid = useMemo(() => {
@@ -112,31 +116,30 @@ export const useFormValidation = (options: UseFormValidationOptions = {}): UseFo
   }, [validateField, validationRules, values]);
 
   // Set field value
-  const setValue = useCallback((name: string, value: any) => {
+  const setValue = useCallback((name: string, value: unknown) => {
     setValues(prev => ({ ...prev, [name]: value }));
+
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
 
     // Validate on change if enabled
     if (validateOnChange) {
-      const newValues = { ...values, [name]: value };
-      const fieldError = validateField(name, newValues);
-      setErrors(prev => ({ ...prev, [name]: fieldError }));
-      
-      // Also validate fields that might depend on this field (e.g., confirmPassword when password changes)
-      const dependentErrors: FieldErrors = {};
-      Object.keys(validationRules).forEach(fieldName => {
-        if (fieldName !== name) {
-          const error = validateField(fieldName, newValues);
-          if (error !== (errors[fieldName] || null)) {
-            dependentErrors[fieldName] = error;
-          }
+      const rules = validationRules[name];
+      if (rules) {
+        const newValues = { ...values, [name]: value };
+        const error = validateField(name, newValues);
+        if (error) {
+          setErrors(prev => ({ ...prev, [name]: error }));
         }
-      });
-      
-      if (Object.keys(dependentErrors).length > 0) {
-        setErrors(prev => ({ ...prev, ...dependentErrors }));
       }
     }
-  }, [validateField, validateOnChange]);
+  }, [validateField, validateOnChange, validationRules, values, errors]);
 
   // Set field error
   const setError = useCallback((name: string, error: string | null) => {
@@ -169,7 +172,7 @@ export const useFormValidation = (options: UseFormValidationOptions = {}): UseFo
       const { value, type, checked } = event.target as HTMLInputElement;
       
       // Handle different input types
-      let fieldValue: any = value;
+      let fieldValue: string | number | boolean = value;
       if (type === 'checkbox') {
         fieldValue = checked;
       } else if (type === 'number') {
@@ -184,14 +187,16 @@ export const useFormValidation = (options: UseFormValidationOptions = {}): UseFo
   const handleBlur = useCallback((name: string) => {
     return () => {
       setTouched(name, true);
-
+      
       // Validate on blur if enabled
       if (validateOnBlur) {
-        const fieldError = validateField(name, values);
-        setErrors(prev => ({ ...prev, [name]: fieldError }));
+        const error = validateField(name, values);
+        if (error) {
+          setErrors(prev => ({ ...prev, [name]: error }));
+        }
       }
     };
-  }, [setTouched, validateField, validateOnBlur]);
+  }, [setTouched, validateField, validateOnBlur, values]);
 
   // Handle form submission
   const handleSubmit = useCallback((onSubmit: (values: FieldValue) => void) => {
@@ -215,6 +220,13 @@ export const useFormValidation = (options: UseFormValidationOptions = {}): UseFo
     };
   }, [values, validationRules, validateForm]);
 
+  const getFieldProps = (name: string) => ({
+    name,
+    value: (values[name] ?? '') as string | number,
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setValue(name, e.target.value),
+    onBlur: handleBlur(name),
+  });
+
   return {
     // State
     values,
@@ -234,5 +246,6 @@ export const useFormValidation = (options: UseFormValidationOptions = {}): UseFo
     handleChange,
     handleBlur,
     handleSubmit,
+    getFieldProps,
   };
 };
