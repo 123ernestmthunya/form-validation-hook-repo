@@ -1,7 +1,6 @@
-// Types for validation
+
 export type ValidationRule<T = any> = (value: T, allValues?: any) => string | null;
 
-// Validation function creators
 export const required = (message = 'This field is required'): ValidationRule => {
   return (value: any, _allValues?: any): string | null => {
     if (value === null || value === undefined || value === '') {
@@ -37,7 +36,6 @@ export const isEmail = (message = 'Please enter a valid email address'): Validat
       return message;
     }
     
-    // Simple email regex - for production, consider using a more robust solution
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     
     if (!emailRegex.test(value)) {
@@ -50,7 +48,7 @@ export const isEmail = (message = 'Please enter a valid email address'): Validat
 export const isNumeric = (message = 'Please enter a valid number'): ValidationRule => {
   return (value: any, _allValues?: any): string | null => {
     if (value === '' || value === null || value === undefined) {
-      return null; // Let required() handle empty values
+      return null;
     }
     
     const num = Number(value);
@@ -85,7 +83,6 @@ export const max = (maxValue: number, message?: string): ValidationRule => {
   };
 };
 
-// Password confirmation validation helper
 export const confirmPassword = (passwordFieldName: string = 'password', message = 'Passwords do not match'): ValidationRule => {
   return (value: any, allValues?: any): string | null => {
     if (!allValues) {
